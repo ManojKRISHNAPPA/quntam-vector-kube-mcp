@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "kubernetes": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/CHANGE/THIS/PATH/TO/kubernetes-mcp",
+        "run",
+        "python",
+        "server.py"
+      ],
+      "disabled": false,
+      "alwaysAllow": []
+    }
+  }
+}
