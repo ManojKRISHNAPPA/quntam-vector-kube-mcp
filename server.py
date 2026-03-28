@@ -15,7 +15,7 @@ from typing import Any, Optional
 
 import mcp.server.stdio
 import mcp.types as types
-from mcp.server import Server
+from mcp.server import Server, NotificationOptions
 from mcp.server.models import InitializationOptions
 
 # Kubernetes
@@ -1329,7 +1329,7 @@ async def main():
                 server_name="kubernetes-mcp",
                 server_version="1.0.0",
                 capabilities=app.get_capabilities(
-                    notification_options=None,
+                    notification_options=NotificationOptions(),
                     experimental_capabilities={},
                 ),
             ),
