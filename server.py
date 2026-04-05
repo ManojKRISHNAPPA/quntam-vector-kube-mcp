@@ -31,6 +31,24 @@ try:
 except ImportError:
     AWS_AVAILABLE = False
 
+# PostgreSQL
+try:
+    import psycopg2
+    import psycopg2.extras
+    PG_AVAILABLE = True
+except ImportError:
+    PG_AVAILABLE = False
+
+# PostgreSQL default config (override via environment variables)
+PG_DEFAULTS = {
+    "host":    os.environ.get("POSTGRES_HOST",    "quantamvectordb.crqai6ems4a2.ap-northeast-1.rds.amazonaws.com"),
+    "port":    int(os.environ.get("POSTGRES_PORT", "5432")),
+    "dbname":  os.environ.get("POSTGRES_DB",      "postgres"),
+    "user":    os.environ.get("POSTGRES_USER",     ""),
+    "password":os.environ.get("POSTGRES_PASSWORD", ""),
+    "sslmode": os.environ.get("POSTGRES_SSLMODE",  "require"),
+}
+
 KUBE_CONFIG_PATH = str(Path.home() / ".kube" / "config")
 
 app = Server("kubernetes-mcp")
@@ -578,6 +596,93 @@ TOOLS = [
             "required": ["cluster_name"],
         },
     ),
+
+    # ── PostgreSQL ────────────────────────────────────────────────────────
+    types.Tool(
+        name="pg_list_users",
+        description="List all PostgreSQL users/roles in the database",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    types.Tool(
+        name="pg_list_databases",
+        description="List all PostgreSQL databases on the server",
+        inputSchema={"type": "object", "properties": {}, "required": []},
+    ),
+    types.Tool(
+        name="pg_list_schemas",
+        description="List all schemas in the connected PostgreSQL database",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "dbname": {"type": "string", "description": "Database name (defaults to configured DB)"},
+            },
+            "required": [],
+        },
+    ),
+    types.Tool(
+        name="pg_list_tables",
+        description="List all tables in a PostgreSQL schema",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "schema":  {"type": "string", "description": "Schema name (default: public)"},
+                "dbname":  {"type": "string", "description": "Database name (defaults to configured DB)"},
+            },
+            "required": [],
+        },
+    ),
+    types.Tool(
+        name="pg_describe_table",
+        description="Show column definitions, types, and constraints for a PostgreSQL table",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "table":  {"type": "string", "description": "Table name"},
+                "schema": {"type": "string", "description": "Schema name (default: public)"},
+                "dbname": {"type": "string", "description": "Database name (defaults to configured DB)"},
+            },
+            "required": ["table"],
+        },
+    ),
+    types.Tool(
+        name="pg_table_stats",
+        description="Get row count and disk size for a PostgreSQL table",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "table":  {"type": "string", "description": "Table name"},
+                "schema": {"type": "string", "description": "Schema name (default: public)"},
+                "dbname": {"type": "string", "description": "Database name (defaults to configured DB)"},
+            },
+            "required": ["table"],
+        },
+    ),
+    types.Tool(
+        name="pg_list_indexes",
+        description="List indexes on a PostgreSQL table",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "table":  {"type": "string", "description": "Table name"},
+                "schema": {"type": "string", "description": "Schema name (default: public)"},
+                "dbname": {"type": "string", "description": "Database name (defaults to configured DB)"},
+            },
+            "required": ["table"],
+        },
+    ),
+    types.Tool(
+        name="pg_execute_query",
+        description="Execute a read-only SELECT query on the PostgreSQL database and return results",
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "query":  {"type": "string", "description": "SQL SELECT query to execute"},
+                "dbname": {"type": "string", "description": "Database name (defaults to configured DB)"},
+                "limit":  {"type": "integer", "description": "Max rows to return (default 100)"},
+            },
+            "required": ["query"],
+        },
+    ),
 ]
 
 
@@ -841,6 +946,31 @@ async def _dispatch(name: str, args: dict) -> list[types.TextContent]:
 
     if name == "eks_fargate_profiles":
         return await _eks_fargate_profiles(args)
+
+    # ── PostgreSQL ────────────────────────────────────────────────────────
+    if name == "pg_list_users":
+        return await _pg_list_users(args)
+
+    if name == "pg_list_databases":
+        return await _pg_list_databases(args)
+
+    if name == "pg_list_schemas":
+        return await _pg_list_schemas(args)
+
+    if name == "pg_list_tables":
+        return await _pg_list_tables(args)
+
+    if name == "pg_describe_table":
+        return await _pg_describe_table(args)
+
+    if name == "pg_table_stats":
+        return await _pg_table_stats(args)
+
+    if name == "pg_list_indexes":
+        return await _pg_list_indexes(args)
+
+    if name == "pg_execute_query":
+        return await _pg_execute_query(args)
 
     return _err(f"Unknown tool: {name}")
 
@@ -1314,6 +1444,200 @@ async def _eks_fargate_profiles(args: dict) -> list[types.TextContent]:
         except Exception as e:
             details.append({"name": pname, "error": str(e)})
     return _ok(details)
+
+
+# ---------------------------------------------------------------------------
+# PostgreSQL helpers
+# ---------------------------------------------------------------------------
+
+def _pg_connect(args: dict):
+    """Create a psycopg2 connection using PG_DEFAULTS, optionally overriding dbname."""
+    if not PG_AVAILABLE:
+        raise RuntimeError("psycopg2 is not installed. Run: uv add psycopg2-binary")
+    cfg = dict(PG_DEFAULTS)
+    if args.get("dbname"):
+        cfg["dbname"] = args["dbname"]
+    if not cfg["user"]:
+        raise RuntimeError("POSTGRES_USER environment variable is not set")
+    if not cfg["password"]:
+        raise RuntimeError("POSTGRES_PASSWORD environment variable is not set")
+    return psycopg2.connect(**cfg)
+
+
+def _pg_query(conn, sql: str, params=None) -> list[dict]:
+    """Run a query and return rows as list of dicts."""
+    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+        cur.execute(sql, params)
+        return [dict(row) for row in cur.fetchall()]
+
+
+async def _pg_list_users(args: dict) -> list[types.TextContent]:
+    conn = _pg_connect(args)
+    try:
+        rows = _pg_query(conn, """
+            SELECT
+                rolname        AS username,
+                rolsuper       AS superuser,
+                rolcreatedb    AS createdb,
+                rolcreaterole  AS createrole,
+                rolcanlogin    AS can_login,
+                rolconnlimit   AS conn_limit,
+                rolvaliduntil  AS valid_until
+            FROM pg_roles
+            ORDER BY rolname
+        """)
+        return _ok(rows)
+    finally:
+        conn.close()
+
+
+async def _pg_list_databases(args: dict) -> list[types.TextContent]:
+    conn = _pg_connect(args)
+    try:
+        rows = _pg_query(conn, """
+            SELECT
+                datname       AS database,
+                pg_catalog.pg_get_userbyid(datdba) AS owner,
+                pg_encoding_to_char(encoding)      AS encoding,
+                datcollate    AS collation,
+                datctype      AS ctype,
+                pg_size_pretty(pg_database_size(datname)) AS size
+            FROM pg_database
+            WHERE datistemplate = false
+            ORDER BY datname
+        """)
+        return _ok(rows)
+    finally:
+        conn.close()
+
+
+async def _pg_list_schemas(args: dict) -> list[types.TextContent]:
+    conn = _pg_connect(args)
+    try:
+        rows = _pg_query(conn, """
+            SELECT
+                schema_name,
+                schema_owner
+            FROM information_schema.schemata
+            ORDER BY schema_name
+        """)
+        return _ok(rows)
+    finally:
+        conn.close()
+
+
+async def _pg_list_tables(args: dict) -> list[types.TextContent]:
+    schema = args.get("schema", "public")
+    conn = _pg_connect(args)
+    try:
+        rows = _pg_query(conn, """
+            SELECT
+                table_schema,
+                table_name,
+                table_type
+            FROM information_schema.tables
+            WHERE table_schema = %s
+            ORDER BY table_name
+        """, (schema,))
+        return _ok(rows)
+    finally:
+        conn.close()
+
+
+async def _pg_describe_table(args: dict) -> list[types.TextContent]:
+    schema = args.get("schema", "public")
+    table  = args["table"]
+    conn   = _pg_connect(args)
+    try:
+        columns = _pg_query(conn, """
+            SELECT
+                column_name,
+                data_type,
+                character_maximum_length,
+                is_nullable,
+                column_default
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s
+            ORDER BY ordinal_position
+        """, (schema, table))
+
+        constraints = _pg_query(conn, """
+            SELECT
+                tc.constraint_name,
+                tc.constraint_type,
+                kcu.column_name
+            FROM information_schema.table_constraints tc
+            JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema   = kcu.table_schema
+            WHERE tc.table_schema = %s AND tc.table_name = %s
+            ORDER BY tc.constraint_type, kcu.column_name
+        """, (schema, table))
+
+        return _ok({"columns": columns, "constraints": constraints})
+    finally:
+        conn.close()
+
+
+async def _pg_table_stats(args: dict) -> list[types.TextContent]:
+    schema = args.get("schema", "public")
+    table  = args["table"]
+    conn   = _pg_connect(args)
+    try:
+        qualified = f"{schema}.{table}"
+        rows = _pg_query(conn, f"""
+            SELECT
+                schemaname,
+                tablename,
+                n_live_tup                                  AS live_rows,
+                n_dead_tup                                  AS dead_rows,
+                pg_size_pretty(pg_total_relation_size('{qualified}')) AS total_size,
+                pg_size_pretty(pg_relation_size('{qualified}'))       AS table_size,
+                last_vacuum,
+                last_autovacuum,
+                last_analyze,
+                last_autoanalyze
+            FROM pg_stat_user_tables
+            WHERE schemaname = %s AND tablename = %s
+        """, (schema, table))
+        return _ok(rows)
+    finally:
+        conn.close()
+
+
+async def _pg_list_indexes(args: dict) -> list[types.TextContent]:
+    schema = args.get("schema", "public")
+    table  = args["table"]
+    conn   = _pg_connect(args)
+    try:
+        rows = _pg_query(conn, """
+            SELECT
+                indexname,
+                indexdef
+            FROM pg_indexes
+            WHERE schemaname = %s AND tablename = %s
+            ORDER BY indexname
+        """, (schema, table))
+        return _ok(rows)
+    finally:
+        conn.close()
+
+
+async def _pg_execute_query(args: dict) -> list[types.TextContent]:
+    query = args["query"].strip()
+    limit = args.get("limit", 100)
+    # Enforce read-only: only allow SELECT statements
+    if not query.upper().startswith("SELECT"):
+        return _err("Only SELECT queries are permitted for safety")
+    conn = _pg_connect(args)
+    try:
+        conn.set_session(readonly=True)
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(query)
+            rows = [dict(r) for r in cur.fetchmany(limit)]
+        return _ok({"row_count": len(rows), "rows": rows})
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------

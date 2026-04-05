@@ -1,0 +1,29 @@
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJU3dRYUlESXI1U3N3RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TmpBME1ETXhOalExTXpsYUZ3MHpOakF6TXpFeE5qVXdNemxhTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUUNjdXJydG15UUd3UUZVeERFcEZsTG9hZVVtT0d4UUFqTlcyckRmQ0hVSkl5a0Uyd002THJBcWQydWUKN3U1YmVwb3Bwd3p3Qmg3SWM3TkF1TnZKUENxZE9YZE5JcUhvR0lxbHNkb2ZtL3hzQnExM1RYRG8zSDl1cGh2Ugp0SkJjaUd5RGc0R1E0ekFqN01rWG9mMmt1RVlnWHdvSSsyeFhDNkNuZUloUWNrajlRQTM5RklhR2xRRU9ZVHo1Ck9EZHhzVEo5WXJGMU1EenRVc1BPcWdwbXIrYnBEZDZ3elkyeTJOc1d4Vmo2Snc2bm52Z0pKZDJ1RTJ3cU1BbUMKL2FYaHowNDJQN001eEJtalpsVzdVeHlEckZrVDhHZmRocjd3TjB0c0N0T01GZGFBc2EzTWJ6NG5zN0tTUlUrbgpydlBzTWF5cWU4bXh2R1N0ZkMrb1cwY0FQU1JUQWdNQkFBR2pXVEJYTUE0R0ExVWREd0VCL3dRRUF3SUNwREFQCkJnTlZIUk1CQWY4RUJUQURBUUgvTUIwR0ExVWREZ1FXQkJTb1FaNFVQelNKZ1VNU2ZsQms0MkM1U3dBT09qQVYKQmdOVkhSRUVEakFNZ2dwcmRXSmxjbTVsZEdWek1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQXIxbVVWUkxCWgpnNFRyVjNPbjFGeVEvc1Vud3hzWXc5NDlFQkVZS0VqcmJTeVhCeURHMENMWHV3cGgvT0ZGZklKVmpxeVk2UGM5CmNac0pBUnZWSmYyU2EwRWFocXpvNkRnQ0wwWC9LbUpWeGhuMFZDbndQUXFGM1RqK3N1b1R0R0RFL002aU5kMlAKdkJ0SXVuUWRBL3dBN2p0akVuVmg3TFp5am02djVkRjhEaVpTbEV0MVF3L3dSOGFvNGU5Si9DemoySDk3b2hacAoxQk9CVmI5d0NnRzZkS1lLK0U1ZGg4emNrb0d3U0djVmMvNFBiTURPZ2FCTUE4V1l1Mmd5ZVBJVWp6UzEzR1ZUCnJPNkEybHdCSUdUVFg4NU5DMmZmNDNuQ3owcFp2akFjQzRQcVFoZGIzQTNnTXRRMURIMk1JM1BoWktUQXdzNXoKMjNvdWVnOS9ZN0NWCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    server: https://54010A8680852B657EC215C7264F77E3.yl4.ap-northeast-1.eks.amazonaws.com
+  name: arn:aws:eks:ap-northeast-1:508262720940:cluster/quantamvector
+contexts:
+- context:
+    cluster: arn:aws:eks:ap-northeast-1:508262720940:cluster/quantamvector
+    user: arn:aws:eks:ap-northeast-1:508262720940:cluster/quantamvector
+  name: arn:aws:eks:ap-northeast-1:508262720940:cluster/quantamvector
+current-context: arn:aws:eks:ap-northeast-1:508262720940:cluster/quantamvector
+kind: Config
+preferences: {}
+users:
+- name: arn:aws:eks:ap-northeast-1:508262720940:cluster/quantamvector
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      args:
+      - --region
+      - ap-northeast-1
+      - eks
+      - get-token
+      - --cluster-name
+      - quantamvector
+      - --output
+      - json
+      command: aws
